@@ -36,20 +36,32 @@ pipeline {
 
         stage('Push to DockerHub') {
             steps {
+                withCredentials([usernamePassword(credentialsId: 'my-dockerhub-hello-world-id',
+                                                  usernameVariable: 'DOCKER_USERNAME',
+                                                  passwordVariable: 'DOCKER_PASSWORD')]) {
+                    script {
+                        try {
+                            bat """
+                                echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin
+                                docker tag ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}
+                                docker push ${DOCKER_USERNAME}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}
+                            """
+                        } catch (Exception e) {
+                            echo "Failed to push Docker image to registry: ${e.message}"
+                            error "Failed to push Docker image"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Cleanup') {
+            steps {
                 script {
                     try {
-                        withCredentials([usernamePassword(credentialsId: 'my-dockerhub-hello-world-id', 
-                                                         usernameVariable: 'DOCKER_USERNAME', 
-                                                         passwordVariable: 'DOCKER_PASSWORD')]) {
-                            // Explicit login before push
-                            bat """
-                            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-                            docker push ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}
-                            """
-                        }
+                        bat "docker image rm ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} || echo 'Image not found or already removed'"
                     } catch (Exception e) {
-                        echo "Failed to push Docker image to registry: ${e.message}"
-                        error "Failed to push Docker image"
+                        echo "Cleanup step failed: ${e.message}"
                     }
                 }
             }
